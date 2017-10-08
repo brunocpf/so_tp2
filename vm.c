@@ -424,6 +424,8 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 void
 pagefault_handler(void)
 {
+  cprintf("page fault!\n");
+
   uint va = rcr2();
   pte_t *pte = walkpgdir(myproc()->pgdir, (void*)va, 0);
 
@@ -434,12 +436,13 @@ pagefault_handler(void)
   if(!(*pte & PTE_COW))
     panic("Invalid addr.");
 
+  cprintf("  >refs: %d\n", refsCnt);
   if(refsCnt == 1){
     // set as writable, unset as cow
     *pte |= PTE_W;
     *pte &= ~PTE_COW;
   }
-  else if (refsCnt > 1){
+  else if(refsCnt > 1){
     // copy page
     char *m = kalloc();
     memmove(m, (char*)P2V(pa), PGSIZE);

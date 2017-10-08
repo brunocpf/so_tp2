@@ -99,24 +99,48 @@ sys_date(void)
   return 0;
 }
 
+static pte_t *
+walkpgdir(pde_t *pgdir, const void *va, int alloc)
+{
+  pde_t *pde;
+  pte_t *pgtab;
+
+  pde = &pgdir[PDX(va)];
+  if(*pde & PTE_P){
+    pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+  } else {
+    if(!alloc || (pgtab = (pte_t*)kalloc()) == 0)
+      return 0;
+    // Make sure all those PTE_P bits are zero.
+    memset(pgtab, 0, PGSIZE);
+    // The permissions here are overly generous, but they can
+    // be further restricted by the permissions in the page table
+    // entries, if necessary.
+    *pde = V2P(pgtab) | PTE_P | PTE_W | PTE_U;
+  }
+  //cprintf("va : %d, PTX(va) %d, %d \n", va, PTX(va), &pgtab[PTX(va)]);
+  return &pgtab[PTX(va)];
+}
+
+
 int
 sys_virt2real(void)
 {
   char *va;
   argptr(0, &va, sizeof(char*));
   struct proc *p = myproc();
-  pde_t *pde;
-  pte_t *pgtab;
+  //pde_t *pde;
+  //pte_t *pgtab;
 
-  pde = &p->pgdir[PDX(va)];
-  pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
-  return (int) &pgtab[PTX(va)];
+  //pde = &p->pgdir[PDX(va)];
+  //pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+  return (int) walkpgdir(p->pgdir, va, 0);
 }
 
 int
 sys_num_pages(void)
 {
-  return get_refpgcnt();
+  return myproc()->sz/PGSIZE;
 }
 
 int

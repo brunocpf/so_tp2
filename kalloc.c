@@ -22,7 +22,6 @@ struct {
   int use_lock;
   struct run *freelist;
 
-  uint refpg_cnt; // Number of referenced pages
   uint pgref_cnt[PHYSTOP >> PGSHIFT]; // Counter of references per page
 } kmem;
 
@@ -36,7 +35,6 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
-  kmem.refpg_cnt = 0;
   freerange(vstart, vend);
 }
 
@@ -52,8 +50,7 @@ freerange(void *vstart, void *vend)
 {
   char *p;
   p = (char*)PGROUNDUP((uint)vstart);
-  for(; p + PGSIZE <= (char*)vend; p += PGSIZE)
-  {
+  for(; p + PGSIZE <= (char*)vend; p += PGSIZE){
     kmem.pgref_cnt[V2P(p) >> PGSHIFT] = 0;
     kfree(p);
   }
@@ -78,7 +75,6 @@ kfree(char *v)
     kmem.pgref_cnt[V2P(v) >> PGSHIFT]--;
     
   if(kmem.pgref_cnt[V2P(v) >> PGSHIFT] == 0){
-    kmem.refpg_cnt--;
     // Fill with junk to catch dangling refs.
     memset(v, 1, PGSIZE);
     r->next = kmem.freelist;
@@ -101,7 +97,6 @@ kalloc(void)
   r = kmem.freelist;
   if(r){
     kmem.freelist = r->next;
-    kmem.refpg_cnt++;
     kmem.pgref_cnt[V2P((char*)r) >> PGSHIFT]++;
   }
   if(kmem.use_lock)
@@ -114,17 +109,4 @@ uint*
 get_pgrefs()
 {
   return kmem.pgref_cnt;
-}
-
-// Returns the number of pages being referenced by the
-// process.
-uint
-get_refpgcnt(void)
-{
-  if(kmem.use_lock)
-    acquire(&kmem.lock);
-  uint pgcnt = kmem.refpg_cnt;
-  if(kmem.use_lock)
-    release(&kmem.lock); 
-  return pgcnt;
 }
