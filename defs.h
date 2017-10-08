@@ -68,6 +68,8 @@ char*           kalloc(void);
 void            kfree(char*);
 void            kinit1(void*, void*);
 void            kinit2(void*, void*);
+uint            get_refpgcnt(void);
+uint*           get_pgrefs();
 
 // kbd.c
 void            kbdintr(void);
@@ -120,6 +122,7 @@ void            userinit(void);
 int             wait(void);
 void            wakeup(void*);
 void            yield(void);
+int             forkcow(void);
 
 // swtch.S
 void            swtch(struct context**, struct context*);
@@ -185,6 +188,8 @@ void            switchuvm(struct proc*);
 void            switchkvm(void);
 int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
+pde_t*          copyuvmcow(pde_t*, uint);
+void            pagefault_handler(void);
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))

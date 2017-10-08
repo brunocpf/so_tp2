@@ -89,3 +89,38 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+int
+sys_date(void)
+{
+  char *ptr;
+  argptr(0, &ptr, sizeof(struct rtcdate*));
+  cmostime((struct rtcdate*)ptr);
+  return 0;
+}
+
+int
+sys_virt2real(void)
+{
+  char *va;
+  argptr(0, &va, sizeof(char*));
+  struct proc *p = myproc();
+  pde_t *pde;
+  pte_t *pgtab;
+
+  pde = &p->pgdir[PDX(va)];
+  pgtab = (pte_t*)P2V(PTE_ADDR(*pde));
+  return (int) &pgtab[PTX(va)];
+}
+
+int
+sys_num_pages(void)
+{
+  return get_refpgcnt();
+}
+
+int
+sys_forkcow(void)
+{
+  return forkcow();
+}

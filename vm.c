@@ -342,6 +342,42 @@ bad:
   return 0;
 }
 
+// Given a parent process's page table, give its reference
+// to the child
+pde_t*
+copyuvmcow(pde_t *pgdir, uint sz)
+{
+  pde_t *d;
+  pte_t *pte;
+  uint pa, i, flags;
+  //char *mem; // unused on COW
+
+  if((d = setupkvm()) == 0)
+    return 0;
+  for(i = 0; i < sz; i += PGSIZE){
+    if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
+      panic("copyuvm: pte should exist");
+    if(!(*pte & PTE_P))
+      panic("copyuvm: page not present");
+
+    *pte |= PTE_COW; // set COW flag
+    *pte &= ~PTE_W; // make it read-only
+    pa = PTE_ADDR(*pte);
+    flags = PTE_FLAGS(*pte);
+    if(mappages(d, (void*)i, PGSIZE, pa, flags) < 0)
+      goto bad;
+    uint *pgrefs = get_pgrefs();
+    pgrefs[pa >> PGSHIFT]++;
+  }
+  lcr3(V2P(pgdir));
+  return d;
+bad:
+  freevm(d);
+  lcr3(V2P(pgdir)); // flush tlb to fix references of the parent process
+  return 0;
+}
+
+
 //PAGEBREAK!
 // Map user virtual address to kernel address.
 char*
@@ -384,7 +420,38 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 }
 
 //PAGEBREAK!
-// Blank page.
+
+void
+pagefault_handler(void)
+{
+  uint va = rcr2();
+  pte_t *pte = walkpgdir(myproc()->pgdir, (void*)va, 0);
+
+  uint *pgrefs = get_pgrefs();
+  uint pa = PTE_ADDR(*pte);
+  uint refsCnt = pgrefs[pa >> PGSHIFT];
+
+  if(!(*pte & PTE_COW))
+    panic("Invalid addr.");
+
+  if(refsCnt == 1){
+    // set as writable, unset as cow
+    *pte |= PTE_W;
+    *pte &= ~PTE_COW;
+  }
+  else if (refsCnt > 1){
+    // copy page
+    char *m = kalloc();
+    memmove(m, (char*)P2V(pa), PGSIZE);
+    *pte = V2P(m) | PTE_P | PTE_U | PTE_W;
+    pgrefs[pa >> PGSHIFT]--;
+  }
+  else
+    panic("refs < 1");
+  
+  lcr3(V2P(myproc()->pgdir)); // flush TLB
+}
+
 //PAGEBREAK!
 // Blank page.
 //PAGEBREAK!

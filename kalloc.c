@@ -21,6 +21,9 @@ struct {
   struct spinlock lock;
   int use_lock;
   struct run *freelist;
+
+  uint refpg_cnt; // Number of referenced pages
+  uint pgref_cnt[PHYSTOP >> PGSHIFT]; // Counter of references per page
 } kmem;
 
 // Initialization happens in two phases.
@@ -33,6 +36,7 @@ kinit1(void *vstart, void *vend)
 {
   initlock(&kmem.lock, "kmem");
   kmem.use_lock = 0;
+  kmem.refpg_cnt = 0;
   freerange(vstart, vend);
 }
 
@@ -49,7 +53,10 @@ freerange(void *vstart, void *vend)
   char *p;
   p = (char*)PGROUNDUP((uint)vstart);
   for(; p + PGSIZE <= (char*)vend; p += PGSIZE)
+  {
+    kmem.pgref_cnt[V2P(p) >> PGSHIFT] = 0;
     kfree(p);
+  }
 }
 //PAGEBREAK: 21
 // Free the page of physical memory pointed at by v,
@@ -63,15 +70,20 @@ kfree(char *v)
 
   if((uint)v % PGSIZE || v < end || V2P(v) >= PHYSTOP)
     panic("kfree");
-
-  // Fill with junk to catch dangling refs.
-  memset(v, 1, PGSIZE);
-
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = (struct run*)v;
-  r->next = kmem.freelist;
-  kmem.freelist = r;
+    
+  if(kmem.pgref_cnt[V2P(v) >> PGSHIFT] > 0)
+    kmem.pgref_cnt[V2P(v) >> PGSHIFT]--;
+    
+  if(kmem.pgref_cnt[V2P(v) >> PGSHIFT] == 0){
+    kmem.refpg_cnt--;
+    // Fill with junk to catch dangling refs.
+    memset(v, 1, PGSIZE);
+    r->next = kmem.freelist;
+    kmem.freelist = r;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
 }
@@ -87,10 +99,32 @@ kalloc(void)
   if(kmem.use_lock)
     acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    kmem.refpg_cnt++;
+    kmem.pgref_cnt[V2P((char*)r) >> PGSHIFT]++;
+  }
   if(kmem.use_lock)
     release(&kmem.lock);
   return (char*)r;
 }
 
+// Returns the page references array
+uint*
+get_pgrefs()
+{
+  return kmem.pgref_cnt;
+}
+
+// Returns the number of pages being referenced by the
+// process.
+uint
+get_refpgcnt(void)
+{
+  if(kmem.use_lock)
+    acquire(&kmem.lock);
+  uint pgcnt = kmem.refpg_cnt;
+  if(kmem.use_lock)
+    release(&kmem.lock); 
+  return pgcnt;
+}

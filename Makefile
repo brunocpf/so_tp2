@@ -160,8 +160,10 @@ mkfs: mkfs.c fs.h
 
 UPROGS=\
 	_cat\
+	_date\
 	_echo\
 	_forktest\
+	_corretor\
 	_grep\
 	_init\
 	_kill\

@@ -8,6 +8,8 @@
 #include "traps.h"
 #include "spinlock.h"
 
+void pagefault_handler(void);
+
 // Interrupt descriptor table (shared by all CPUs).
 struct gatedesc idt[256];
 extern uint vectors[];  // in vectors.S: array of 256 entry pointers
@@ -45,6 +47,9 @@ trap(struct trapframe *tf)
       exit();
     return;
   }
+
+  if(tf->trapno == T_PGFLT && tf->err & 0x2)
+    pagefault_handler();
 
   switch(tf->trapno){
   case T_IRQ0 + IRQ_TIMER:
