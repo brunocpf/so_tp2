@@ -436,13 +436,11 @@ pagefault_handler(void)
     panic("Invalid addr.");
 
   if(refsCnt == 1){
-    cprintf("didn't copy on write\n");
     // set as writable, unset as cow
     *pte |= PTE_W;
     *pte &= ~PTE_COW;
   }
   else if(refsCnt > 1){
-    cprintf("copy on write\n");
     // copy page
     mem = kalloc();
     memmove(mem, (char*)P2V(pa), PGSIZE);
